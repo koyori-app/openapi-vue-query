@@ -1,0 +1,41 @@
+{
+  "name": "@koyori-app/openapi-vue-query",
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.15.0",
+  "description": "Thin Vue Query wrapper for openapi-fetch clients",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@tanstack/vue-query": "^5.101.0",
+    "openapi-fetch": "^0.17.0",
+    "openapi-typescript-helpers": "^0.1.0",
+    "vue": "^3.5.35"
+  },
+  "devDependencies": {
+    "@tanstack/vue-query": "^5.101.0",
+    "openapi-fetch": "^0.17.0",
+    "openapi-typescript-helpers": "^0.1.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8",
+    "vue": "^3.5.35"
+  }
+}
