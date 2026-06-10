@@ -1,3 +1,5 @@
+import createFetchClient from "openapi-fetch";
+import type { PathsWithMethod } from "openapi-typescript-helpers";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
   OpenApiVueQueryError,
@@ -74,6 +76,26 @@ type paths = {
     };
   };
 };
+
+// Compile-time check: consumer paths flow through createFetchClient → createClient without cast.
+function castFreeTypecheck(fetchClient: ReturnType<typeof createFetchClient<paths>>) {
+  const api = createClient(fetchClient);
+  return {
+    getQuery: api.queryOptions("get", "/users/{userId}", { params: { path: { userId: 1 } } }),
+    listQuery: api.queryOptions("get", "/users"),
+    postMutation: api.useMutation("post", "/users"),
+  };
+}
+
+function useQueryTypecheck(fetchClient: ReturnType<typeof createFetchClient<paths>>) {
+  const api = createClient(fetchClient);
+  return api.useQuery("get", "/users/{userId}", { params: { path: { userId: 1 } } });
+}
+
+function useMutationTypecheck(fetchClient: ReturnType<typeof createFetchClient<paths>>) {
+  const api = createClient(fetchClient);
+  return api.useMutation("post", "/users");
+}
 
 // --------------------------------------------------------------------------
 // Helpers
@@ -262,27 +284,34 @@ describe("queryOptions", () => {
 // --------------------------------------------------------------------------
 
 describe("type inference", () => {
-  it.skip("useQuery data type is inferred from path and method", () => {
-    const api = createClient<paths>({} as any);
-    const result = api.useQuery("get", "/users/{userId}", { params: { path: { userId: 1 } } });
-    expectTypeOf(result.data.value).toMatchTypeOf<{ id: number; name: string } | undefined>();
+  it("PathsWithMethod is not never for get or post", () => {
+    expectTypeOf<PathsWithMethod<paths, "get">>().not.toEqualTypeOf<never>();
+    expectTypeOf<PathsWithMethod<paths, "post">>().not.toEqualTypeOf<never>();
+    expectTypeOf<PathsWithMethod<paths, "get">>().toEqualTypeOf<"/users/{userId}" | "/users">();
+    expectTypeOf<PathsWithMethod<paths, "post">>().toEqualTypeOf<"/users">();
   });
 
-  it.skip("useQuery data type narrows through select", () => {
-    const api = createClient<paths>({} as any);
-    const result = api.useQuery(
-      "get",
-      "/users/{userId}",
-      { params: { path: { userId: 1 } } },
-      { select: (user: { id: number; name: string }) => user.name }
-    );
-    expectTypeOf(result.data.value).toMatchTypeOf<string | undefined>();
+  it("createClient infers paths from FetchClient without explicit generic or cast", () => {
+    const fetchClient = createFetchClient<paths>({ baseUrl: "/" });
+    const api = createClient(fetchClient);
+    expectTypeOf(api).toExtend<import("../src/index.js").OpenApiVueQueryClient<paths>>();
   });
 
-  it.skip("useQuery error type is not never", () => {
-    const api = createClient<paths>({} as any);
-    const result = api.useQuery("get", "/users/{userId}", { params: { path: { userId: 1 } } });
-    expectTypeOf(result.error.value).not.toBeNever();
+  it("cast-free get/post useQuery and useMutation resolve without typed cast", () => {
+    type Result = ReturnType<typeof castFreeTypecheck>;
+    expectTypeOf<Result["getQuery"]>().toHaveProperty("queryKey");
+    expectTypeOf<Result["listQuery"]>().toHaveProperty("queryFn");
+    expectTypeOf<Result["postMutation"]>().toHaveProperty("mutate");
+  });
+
+  it("useQuery data type is inferred from path and method", () => {
+    type Result = ReturnType<typeof useQueryTypecheck>;
+    expectTypeOf<Result["data"]["value"]>().toMatchTypeOf<{ id: number; name: string } | undefined>();
+  });
+
+  it("useQuery error type is not never", () => {
+    type Result = ReturnType<typeof useQueryTypecheck>;
+    expectTypeOf<Result["error"]["value"]>().not.toBeNever();
   });
 
   it("MethodResponse extracts response data type", () => {
@@ -294,10 +323,9 @@ describe("type inference", () => {
     expectTypeOf<Response>().toMatchTypeOf<{ id: number; name: string }>();
   });
 
-  it.skip("useMutation variables type is not never", () => {
-    const api = createClient<paths>({} as any);
-    const result = api.useMutation("post", "/users");
-    type MutateVars = Parameters<typeof result.mutate>[0];
+  it("useMutation variables type is not never", () => {
+    type Result = ReturnType<typeof useMutationTypecheck>;
+    type MutateVars = Parameters<Result["mutate"]>[0];
     expectTypeOf<MutateVars>().not.toBeNever();
   });
 });
