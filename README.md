@@ -56,6 +56,15 @@ npm Trusted Publishing（OIDC）を最終 publish 経路の第一候補とする
 
 **本 package は MIT を採用**（`package.json` の `license` フィールド参照）。理由:
 
-- **AGPL 切離**: 参照元の `openapi-react-query`（AGPL-3.0）とはライセンスを切り離し、クリーンルーム実装＋MIT で再配布可能にする。
+- **AGPL 切離**: 利用先である task アプリ本体（AGPL-3.0）とライセンスを切り離すため、本 package を独立した MIT パッケージとして再配布可能にする。なお参照した API 形状の出典 `openapi-react-query` / `openapi-fetch` は MIT であり（下記 Acknowledgements 参照）、本 package もクリーンルーム実装＋MIT で配布する。
 - **npm 慣行**: Vue / TanStack 周辺の薄い wrapper ライブラリは MIT が主流で、利用者の法務レビュー負荷が低い。
 - **特許条項**: 特許リスクを明示的にカバーしたい場合は Apache-2.0 が有利だが、本 package は薄い API ラッパーであり、現フェーズでは MIT の簡潔さを優先。必要なら P2 で Apache-2.0 への変更を再検討する。
+
+## Acknowledgements
+
+本 package は以下の OSS の**公開 API 形状**を参考にしたクリーンルーム実装です（ソースコードの複製は行っていません）。優れた設計に感謝します。
+
+- [`openapi-react-query`](https://github.com/openapi-ts/openapi-typescript/tree/main/packages/openapi-react-query) — © Martin Paucot, MIT License. クエリキー `[method, path, init]` と hooks API 形状の出典。
+- [`openapi-fetch`](https://github.com/openapi-ts/openapi-typescript/tree/main/packages/openapi-fetch) / [`openapi-typescript`](https://github.com/openapi-ts/openapi-typescript) — © Drew Powers and contributors, MIT License. リクエスト型付けの基盤。
+
+ライセンス全文は各リポジトリを参照してください。
