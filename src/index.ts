@@ -1,35 +1,59 @@
 import {
-  queryOptions as buildQueryOptions,
+  type DataTag,
+  type InfiniteData,
+  type QueryClient,
+  type UseInfiniteQueryOptions,
+  type UseInfiniteQueryReturnType,
+  type UseMutationOptions,
+  type UseMutationReturnType,
+  type UseQueryOptions,
+  type UseQueryReturnType,
   useInfiniteQuery,
   useMutation,
-  useQuery
+  useQuery,
 } from "@tanstack/vue-query";
-import type { QueryClient } from "@tanstack/vue-query";
 import type {
-  Client as FetchClient,
   DefaultParamsOption,
-  MaybeOptionalInit
+  Client as FetchClient,
+  FetchResponse,
+  MaybeOptionalInit,
 } from "openapi-fetch";
-import type { HttpMethod, MediaType, PathsWithMethod } from "openapi-typescript-helpers";
+import type { HttpMethod, MediaType, PathsWithMethod, RequiredKeysOf } from "openapi-typescript-helpers";
 
 type PathsMap = Record<string, Partial<Record<HttpMethod, {}>>>;
 
-type InitWithUnknowns = { [key: string]: unknown };
+type InitWithUnknowns<Init> = Init & { [key: string]: unknown };
+
+// NonNullable strips `undefined` introduced by Partial<Record<HttpMethod, {}>>
+// so that FetchResponse<T> always receives a defined operation type.
+type SafeResponse<
+  Paths extends PathsMap,
+  Path extends keyof Paths,
+  Method,
+  Init
+> = Required<FetchResponse<NonNullable<Paths[Path] extends Record<string, any> ? Paths[Path][Method & keyof Paths[Path]] : never>, Init, any>>;
 
 export type QueryKey<
   Paths extends PathsMap,
   Method extends HttpMethod,
   Path extends PathsWithMethod<Paths, Method>,
-  Init = unknown
+  Init = MaybeOptionalInit<Paths[Path], Method>
 > = Init extends undefined ? readonly [Method, Path] : readonly [Method, Path, Init];
 
 export type MethodResponse<
-  Paths extends PathsMap,
+  CreatedClient extends OpenApiVueQueryClient<any, any>,
   Method extends HttpMethod,
-  Path extends PathsWithMethod<Paths, Method>,
-  Init = unknown,
-  Media extends MediaType = MediaType
-> = unknown;
+  Path extends CreatedClient extends OpenApiVueQueryClient<infer Paths, infer _Media>
+    ? PathsWithMethod<Paths, Method>
+    : never,
+  Options = object
+> =
+  CreatedClient extends OpenApiVueQueryClient<
+    infer Paths extends { [key: string]: any },
+    infer Media extends MediaType
+  >
+    ? NonNullable<FetchResponse<Paths[Path][Method], Options, Media>["data"]>
+    : never;
 
 export interface OpenApiVueQueryClient<
   Paths extends PathsMap = PathsMap,
@@ -38,46 +62,75 @@ export interface OpenApiVueQueryClient<
   queryOptions: <
     Method extends HttpMethod,
     Path extends PathsWithMethod<Paths, Method>,
-    Init = unknown
+    Init extends MaybeOptionalInit<Paths[Path], Method>
   >(
     method: Method,
     path: Path,
-    init?: InitWithUnknowns,
-    options?: Record<string, unknown>
-  ) => unknown;
+    ...[init, options]: RequiredKeysOf<Init> extends never
+      ? [InitWithUnknowns<Init>?, UseQueryOptions?]
+      : [InitWithUnknowns<Init>, UseQueryOptions?]
+  ) => {
+    queryKey: DataTag<QueryKey<Paths, Method, Path>, any, any>;
+    queryFn: (...args: any[]) => Promise<any>;
+    [key: string]: any;
+  };
   useQuery: <
     Method extends HttpMethod,
     Path extends PathsWithMethod<Paths, Method>,
-    Init = unknown
+    Init extends MaybeOptionalInit<Paths[Path], Method>,
+    Response extends SafeResponse<Paths, Path, Method, Init> = SafeResponse<Paths, Path, Method, Init>,
+    TSelectData = Response["data"]
   >(
     method: Method,
     path: Path,
-    init?: InitWithUnknowns,
-    options?: Record<string, unknown>,
-    queryClient?: QueryClient
-  ) => unknown;
+    ...[init, options, queryClient]: RequiredKeysOf<Init> extends never
+      ? [
+          InitWithUnknowns<Init>?,
+          Omit<UseQueryOptions<Response["data"], Response["error"], TSelectData, Response["data"], QueryKey<Paths, Method, Path>>, "queryKey" | "queryFn">?,
+          QueryClient?
+        ]
+      : [
+          InitWithUnknowns<Init>,
+          Omit<UseQueryOptions<Response["data"], Response["error"], TSelectData, Response["data"], QueryKey<Paths, Method, Path>>, "queryKey" | "queryFn">?,
+          QueryClient?
+        ]
+  ) => UseQueryReturnType<TSelectData, Response["error"]>;
+  /**
+   * @deprecated Vue Query v5 does not have a dedicated `useSuspenseQuery`.
+   * Use `useQuery` instead and wrap the component with `<Suspense>`.
+   * This method is an alias for `useQuery` kept for API compatibility.
+   */
   useSuspenseQuery: OpenApiVueQueryClient<Paths, Media>["useQuery"];
   useInfiniteQuery: <
     Method extends HttpMethod,
     Path extends PathsWithMethod<Paths, Method>,
-    Init = unknown
+    Init extends MaybeOptionalInit<Paths[Path], Method>,
+    Response extends SafeResponse<Paths, Path, Method, Init> = SafeResponse<Paths, Path, Method, Init>,
+    TPageParam = unknown,
+    TSelectData = Response["data"]
   >(
     method: Method,
     path: Path,
-    init: InitWithUnknowns,
-    options: Record<string, unknown> & { pageParamName?: string },
+    init: InitWithUnknowns<Init>,
+    options: UseInfiniteQueryOptions<Response["data"], Response["error"], TSelectData, QueryKey<Paths, Method, Path>, TPageParam>,
+    pageParamName?: string,
     queryClient?: QueryClient
-  ) => unknown;
+  ) => UseInfiniteQueryReturnType<TSelectData, Response["error"]>;
   useMutation: <
     Method extends Exclude<HttpMethod, "get" | "head">,
     Path extends PathsWithMethod<Paths, Method>,
-    Init = unknown
+    Init extends MaybeOptionalInit<Paths[Path], Method>,
+    Response extends SafeResponse<Paths, Path, Method, Init> = SafeResponse<Paths, Path, Method, Init>,
+    TOnMutateResult = unknown
   >(
     method: Method,
     path: Path,
-    options?: Record<string, unknown>,
+    options?: Omit<
+      UseMutationOptions<Response["data"], Response["error"], Init, TOnMutateResult>,
+      "mutationKey" | "mutationFn"
+    >,
     queryClient?: QueryClient
-  ) => unknown;
+  ) => UseMutationReturnType<Response["data"], Response["error"], Init, TOnMutateResult>;
 }
 
 export class OpenApiVueQueryError<TError = unknown> extends Error {
@@ -106,147 +159,95 @@ export function createQueryKey<
   >;
 }
 
+type AnyFetchFn = (path: string, init?: unknown) => Promise<{
+  data: any;
+  error: any;
+  response: Response;
+}>;
+
 export function createClient<Paths extends PathsMap, Media extends MediaType = MediaType>(
   client: FetchClient<any, Media>
 ): OpenApiVueQueryClient<Paths, Media> {
-  const runMethod = async <
-    Method extends HttpMethod,
-    Path extends PathsWithMethod<Paths, Method>,
-    Init = unknown
-  >(
-    method: Method,
-    path: Path,
-    init: InitWithUnknowns | undefined,
-    signal?: AbortSignal
-  ): Promise<MethodResponse<Paths, Method, Path, Init, Media>> => {
-    const methodName = method.toUpperCase() as Uppercase<Method>;
-    const fn = client[methodName] as (path: string, init?: unknown) => Promise<any>;
-    const result = await fn(path as string, {
-      ...(init as object),
-      signal
-    });
-
-    if (result.error) {
-      throw new OpenApiVueQueryError(result.error, result.response);
-    }
-
-    if (
-      result.response.status === 204 ||
-      result.response.headers.get("Content-Length") === "0"
-    ) {
-      return (result.data ?? null) as MethodResponse<Paths, Method, Path, Init, Media>;
-    }
-
-    return result.data as MethodResponse<Paths, Method, Path, Init, Media>;
+  const callMethod = (method: string, path: string, init: unknown, signal?: AbortSignal) => {
+    const fn = (client as any)[method.toUpperCase()] as AnyFetchFn;
+    return fn(path, { ...(init as object), signal });
   };
 
-  const queryOptions = <
-    Method extends HttpMethod,
-    Path extends PathsWithMethod<Paths, Method>,
-    Init = unknown
-  >(
-    method: Method,
-    path: Path,
-    init?: InitWithUnknowns,
-    options?: Record<string, unknown>
-  ) =>
-    buildQueryOptions({
-      queryKey: createQueryKey<Paths, Method, Path, Init>(method, path, init as Init),
-      queryFn: ({ signal } = { signal: undefined }) =>
-        runMethod<Method, Path, Init>(method, path, init, signal),
-      ...(options ?? {})
-    } as never);
+  const queryOptions = (
+    method: string,
+    path: string,
+    init?: unknown,
+    options?: UseQueryOptions
+  ) => ({
+    queryKey: (
+      init === undefined ? ([method, path] as const) : ([method, path, init] as const)
+    ) as DataTag<any, any, any>,
+    queryFn: ({ signal }: { signal?: AbortSignal } = {}) =>
+      callMethod(method, path, init, signal).then(({ data, error, response }) => {
+        if (error) {
+          throw new OpenApiVueQueryError(error, response);
+        }
+        if (response.status === 204 || response.headers.get("Content-Length") === "0") {
+          return data ?? null;
+        }
+        return data;
+      }),
+    ...(options ?? {}),
+  });
 
   return {
-    queryOptions,
-    useQuery: <
-      Method extends HttpMethod,
-      Path extends PathsWithMethod<Paths, Method>,
-      Init = unknown
-    >(
-      method: Method,
-      path: Path,
-      init?: InitWithUnknowns,
-      options?: Record<string, unknown>,
-      queryClient?: QueryClient
-    ) => useQuery(queryOptions(method, path, init, options), queryClient),
-    useSuspenseQuery: <
-      Method extends HttpMethod,
-      Path extends PathsWithMethod<Paths, Method>,
-      Init = unknown
-    >(
-      method: Method,
-      path: Path,
-      init?: InitWithUnknowns,
-      options?: Record<string, unknown>,
-      queryClient?: QueryClient
-    ) =>
-      useQuery(
-        queryOptions(method, path, init, {
-          ...(options ?? {}),
-          suspense: true
-        }),
-        queryClient
-      ),
-    useInfiniteQuery: <
-      Method extends HttpMethod,
-      Path extends PathsWithMethod<Paths, Method>,
-      Init = unknown
-    >(
-      method: Method,
-      path: Path,
-      init: InitWithUnknowns,
-      options: Record<string, unknown> & { pageParamName?: string },
-      queryClient?: QueryClient
-    ) => {
-      const { pageParamName = "cursor", ...restOptions } = options;
+    queryOptions: queryOptions as OpenApiVueQueryClient<Paths, Media>["queryOptions"],
+    useQuery: (method: any, path: any, ...[init, options, queryClient]: any[]) =>
+      useQuery(queryOptions(method, path, init, options) as any, queryClient) as any,
+    useSuspenseQuery: (method: any, path: any, ...[init, options, queryClient]: any[]) =>
+      useQuery(queryOptions(method, path, init, options) as any, queryClient) as any,
+    useInfiniteQuery: (method: any, path: any, init: any, options: any, pageParamName = "cursor", queryClient?: QueryClient) => {
       return useInfiniteQuery(
         {
-          queryKey: createQueryKey<Paths, Method, Path, Init>(method, path, init as Init),
-          queryFn: async ({ pageParam = 0, signal }: { pageParam?: unknown; signal?: AbortSignal }) => {
-            const methodName = method.toUpperCase() as Uppercase<Method>;
-            const fn = client[methodName] as (path: string, init?: unknown) => Promise<any>;
+          queryKey: (
+            init === undefined ? ([method, path] as const) : ([method, path, init] as const)
+          ) as any,
+          queryFn: async ({
+            queryKey: [method, path, init],
+            pageParam = 0,
+            signal,
+          }: any) => {
             const mergedInit = {
               ...init,
               signal,
               params: {
-                ...(init.params ?? {}),
+                ...(init?.params ?? {}),
                 query: {
-                  ...((init.params as { query?: DefaultParamsOption } | undefined)?.query ?? {}),
-                  [pageParamName]: pageParam
-                }
-              }
+                  ...(init?.params as { query?: DefaultParamsOption } | undefined)?.query,
+                  [pageParamName]: pageParam,
+                },
+              },
             };
-            const result = await fn(path as string, mergedInit);
-
-            if (result.error) {
-              throw new OpenApiVueQueryError(result.error, result.response);
+            const { data, error } = await callMethod(method, path, mergedInit);
+            if (error) {
+              throw new OpenApiVueQueryError(error);
             }
-
-            return result.data;
+            return data;
           },
-          ...(restOptions as object)
-        } as never,
+          ...options,
+        } as any,
         queryClient
-      );
+      ) as any;
     },
-    useMutation: <
-      Method extends Exclude<HttpMethod, "get" | "head">,
-      Path extends PathsWithMethod<Paths, Method>,
-      Init = unknown
-    >(
-      method: Method,
-      path: Path,
-      options?: Record<string, unknown>,
-      queryClient?: QueryClient
-    ) =>
+    useMutation: (method: any, path: any, options?: any, queryClient?: QueryClient) =>
       useMutation(
         {
           mutationKey: [method, path],
-          mutationFn: async (init: InitWithUnknowns) => runMethod(method, path, init),
-          ...(options ?? {})
-        } as never,
+          mutationFn: async (init: unknown) => {
+            const { data, error } = await callMethod(method, path, init);
+            if (error) {
+              throw new OpenApiVueQueryError(error);
+            }
+            return data;
+          },
+          ...(options ?? {}),
+        } as any,
         queryClient
-      )
+      ) as any,
   };
 }
