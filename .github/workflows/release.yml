@@ -32,10 +32,12 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
-      # Trusted publishing (OIDC) requires npm >= 11.5.1.
-      # No NODE_AUTH_TOKEN needed — npm exchanges the OIDC id-token automatically.
+      # pnpm 9 delegates publish to the system npm, and trusted publishing (OIDC)
+      # requires npm >= 11.5.1 (the npm bundled with Actions' Node is 10.x and
+      # fails with a misleading E404). Upgrade npm before publishing.
       - name: Upgrade npm for trusted publishing
         run: npm install -g npm@latest
 
+      # No NODE_AUTH_TOKEN needed — OIDC id-token is exchanged automatically.
       - name: Publish to npm
-        run: npm publish --provenance --access public
+        run: pnpm publish --provenance --access public --no-git-checks
