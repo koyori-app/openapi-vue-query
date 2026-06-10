@@ -4,8 +4,15 @@
   "packageManager": "pnpm@9.15.0",
   "description": "Thin Vue Query wrapper for openapi-fetch clients",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/koyori-app/openapi-vue-query.git"
+  },
   "type": "module",
   "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
     "dist",
     "README.md"
