@@ -177,6 +177,60 @@ export type MethodResponse<
     ? NonNullable<FetchResponse<Paths[Path][Method], Options, Media>["data"]>
     : never;
 
+export type UseQueryResult<
+  CreatedClient extends OpenApiVueQueryClient<any, any>,
+  Method extends HttpMethod,
+  Path extends CreatedClient extends OpenApiVueQueryClient<infer Paths, infer _Media>
+    ? PathsWithMethod<Paths, Method>
+    : never,
+  Init = object
+> = CreatedClient extends OpenApiVueQueryClient<
+  infer Paths extends { [key: string]: any },
+  infer Media extends MediaType
+>
+  ? UseQueryReturnType<
+      Required<FetchResponse<Paths[Path][Method], Init, Media>>["data"],
+      Required<FetchResponse<Paths[Path][Method], Init, Media>>["error"]
+    >
+  : never;
+
+export type UseInfiniteQueryResult<
+  CreatedClient extends OpenApiVueQueryClient<any, any>,
+  Method extends HttpMethod,
+  Path extends CreatedClient extends OpenApiVueQueryClient<infer Paths, infer _Media>
+    ? PathsWithMethod<Paths, Method>
+    : never,
+  Init = object
+> = CreatedClient extends OpenApiVueQueryClient<
+  infer Paths extends { [key: string]: any },
+  infer Media extends MediaType
+>
+  ? UseInfiniteQueryReturnType<
+      Required<FetchResponse<Paths[Path][Method], Init, Media>>["data"],
+      Required<FetchResponse<Paths[Path][Method], Init, Media>>["error"]
+    >
+  : never;
+
+export type UseMutationResult<
+  CreatedClient extends OpenApiVueQueryClient<any, any>,
+  Method extends Exclude<HttpMethod, "get" | "head">,
+  Path extends CreatedClient extends OpenApiVueQueryClient<infer Paths, infer _Media>
+    ? PathsWithMethod<Paths, Method>
+    : never,
+  Init = object,
+  TOnMutateResult = unknown
+> = CreatedClient extends OpenApiVueQueryClient<
+  infer Paths extends { [key: string]: any },
+  infer Media extends MediaType
+>
+  ? UseMutationReturnType<
+      Required<FetchResponse<Paths[Path][Method], Init, Media>>["data"],
+      Required<FetchResponse<Paths[Path][Method], Init, Media>>["error"],
+      Init,
+      TOnMutateResult
+    >
+  : never;
+
 export class OpenApiVueQueryError<TError = unknown> extends Error {
   readonly error: TError;
   readonly response?: Response;
