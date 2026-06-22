@@ -320,9 +320,9 @@ export function createClient<Paths extends {}, Media extends MediaType = MediaTy
                 },
               },
             };
-            const { data, error } = await callMethod(method, path as string, mergedInit);
+            const { data, error, response } = await callMethod(method, path as string, mergedInit);
             if (error) {
-              throw new OpenApiVueQueryError(error);
+              throw new OpenApiVueQueryError(error, response);
             }
             return data;
           },
@@ -336,9 +336,9 @@ export function createClient<Paths extends {}, Media extends MediaType = MediaTy
         {
           mutationKey: [method, path],
           mutationFn: async (init: unknown) => {
-            const { data, error } = await callMethod(method, path as string, init);
+            const { data, error, response } = await callMethod(method, path as string, init);
             if (error) {
-              throw new OpenApiVueQueryError(error);
+              throw new OpenApiVueQueryError(error, response);
             }
             return data;
           },

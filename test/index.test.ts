@@ -7,6 +7,28 @@ import {
   createQueryKey,
 } from "../src/index.js";
 
+// Capture the fn passed to TanStack's useMutation/useInfiniteQuery so we can
+// call it directly in tests (these hooks require Vue context at runtime).
+const captured = vi.hoisted(() => ({
+  mutationFn: undefined as ((init: unknown) => Promise<unknown>) | undefined,
+  infiniteQueryFn: undefined as ((ctx: unknown) => Promise<unknown>) | undefined,
+}));
+
+vi.mock("@tanstack/vue-query", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@tanstack/vue-query")>();
+  return {
+    ...original,
+    useMutation: (options: any) => {
+      captured.mutationFn = options.mutationFn;
+      return {} as any; // stub — tests that need real useMutation use Vue context separately
+    },
+    useInfiniteQuery: (options: any) => {
+      captured.infiniteQueryFn = options.queryFn;
+      return {} as any;
+    },
+  };
+});
+
 // --------------------------------------------------------------------------
 // Shared path types
 // --------------------------------------------------------------------------
@@ -269,6 +291,75 @@ describe("queryOptions", () => {
       expect(opts.queryKey).toHaveLength(2);
       expect(opts.queryKey).toEqual(["get", "/users"]);
     });
+  });
+});
+
+// --------------------------------------------------------------------------
+// useMutation – mutationFn error behavior
+// --------------------------------------------------------------------------
+
+describe("useMutation", () => {
+  it("error carries .error and .response", async () => {
+    const mockResponse = new Response(null, { status: 403 });
+    const api = createClient<paths>({
+      POST: async () => ({
+        data: undefined,
+        error: { message: "forbidden" },
+        response: mockResponse,
+      }),
+    } as any);
+
+    api.useMutation("post", "/users");
+    const mutationFn = captured.mutationFn!;
+
+    const err = await mutationFn({ body: { name: "Aki" } }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(OpenApiVueQueryError);
+    if (err instanceof OpenApiVueQueryError) {
+      expect(err.error).toEqual({ message: "forbidden" });
+      expect(err.response).toBe(mockResponse);
+      expect(err.response?.status).toBe(403);
+    }
+  });
+});
+
+// --------------------------------------------------------------------------
+// useInfiniteQuery – queryFn error behavior
+// --------------------------------------------------------------------------
+
+describe("useInfiniteQuery", () => {
+  it("error carries .error and .response", async () => {
+    const mockResponse = new Response(null, { status: 500 });
+    const api = createClient<paths>({
+      GET: async () => ({
+        data: undefined,
+        error: { message: "internal server error" },
+        response: mockResponse,
+      }),
+    } as any);
+
+    api.useInfiniteQuery(
+      "get",
+      "/users",
+      {},
+      {
+        initialPageParam: undefined,
+        getNextPageParam: () => undefined,
+      } as any
+    );
+
+    const queryFn = captured.infiniteQueryFn!;
+    const err = await queryFn({
+      queryKey: ["get", "/users", {}],
+      pageParam: undefined,
+      signal: undefined,
+    }).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(OpenApiVueQueryError);
+    if (err instanceof OpenApiVueQueryError) {
+      expect(err.error).toEqual({ message: "internal server error" });
+      expect(err.response).toBe(mockResponse);
+      expect(err.response?.status).toBe(500);
+    }
   });
 });
 
