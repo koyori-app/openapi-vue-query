@@ -7,6 +7,21 @@ import {
   createQueryKey,
 } from "../src/index.js";
 
+// Capture the mutationFn passed to TanStack's useMutation so we can call it
+// directly in tests (useMutation requires Vue context at runtime).
+const captured = vi.hoisted(() => ({ mutationFn: undefined as ((init: unknown) => Promise<unknown>) | undefined }));
+
+vi.mock("@tanstack/vue-query", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@tanstack/vue-query")>();
+  return {
+    ...original,
+    useMutation: (options: any) => {
+      captured.mutationFn = options.mutationFn;
+      return {} as any; // stub — tests that need real useMutation use Vue context separately
+    },
+  };
+});
+
 // --------------------------------------------------------------------------
 // Shared path types
 // --------------------------------------------------------------------------
@@ -269,6 +284,34 @@ describe("queryOptions", () => {
       expect(opts.queryKey).toHaveLength(2);
       expect(opts.queryKey).toEqual(["get", "/users"]);
     });
+  });
+});
+
+// --------------------------------------------------------------------------
+// useMutation – mutationFn error behavior
+// --------------------------------------------------------------------------
+
+describe("useMutation", () => {
+  it("error carries .error and .response", async () => {
+    const mockResponse = new Response(null, { status: 403 });
+    const api = createClient<paths>({
+      POST: async () => ({
+        data: undefined,
+        error: { message: "forbidden" },
+        response: mockResponse,
+      }),
+    } as any);
+
+    api.useMutation("post", "/users");
+    const mutationFn = captured.mutationFn!;
+
+    const err = await mutationFn({ body: { name: "Aki" } }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(OpenApiVueQueryError);
+    if (err instanceof OpenApiVueQueryError) {
+      expect(err.error).toEqual({ message: "forbidden" });
+      expect(err.response).toBe(mockResponse);
+      expect(err.response?.status).toBe(403);
+    }
   });
 });
 
