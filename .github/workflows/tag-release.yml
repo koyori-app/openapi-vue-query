@@ -1,0 +1,37 @@
+name: Tag Release
+
+# tag push → git-cliff changelog → GitHub Release draft 作成まで。
+# npm publish は release.yml（Release published 時）のみ。二重発火防止のため --draft 必須。
+on:
+  push:
+    tags: ['v[0-9]*']
+
+permissions:
+  contents: write # gh release create
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0 # git-cliff needs full history for changelog
+          persist-credentials: false
+
+      - name: Install git-cliff
+        uses: taiki-e/install-action@9e1e5806d4a4822de933115878265be9aaa786d9 # v2.82.2
+        with:
+          tool: git-cliff
+
+      - name: Generate changelog
+        run: git-cliff --latest --strip header -o CHANGELOG_RELEASE.md
+
+      - name: Create GitHub Release draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --draft \
+            --title "${{ github.ref_name }}" \
+            --notes-file CHANGELOG_RELEASE.md

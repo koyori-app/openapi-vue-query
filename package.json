@@ -1,7 +1,7 @@
 {
   "name": "@koyori-app/openapi-vue-query",
-  "version": "0.1.3",
-  "packageManager": "pnpm@9.15.0",
+  "version": "0.1.4",
+  "packageManager": "pnpm@11.5.2",
   "description": "Thin Vue Query wrapper for openapi-fetch clients",
   "license": "MIT",
   "repository": {
